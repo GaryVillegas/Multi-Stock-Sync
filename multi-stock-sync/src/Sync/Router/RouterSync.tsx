@@ -11,7 +11,10 @@ import About from "../Views/About/About";
 import { Login } from "../../Auth/Pages";
 import Register from "../../Auth/Pages/Register";
 import Logout from "../../Auth/Pages/Logout";
-import SeleccionConexion from "../Views/SeleccionConexion/SeleccionConexion"; // <--- nuevo
+import SeleccionConexion from "../Views/SeleccionConexion/SeleccionConexion";
+import GestionEnvios from "../Views/GestionEnvios/GestionEnvios"; // ✅ Nuevo
+import RouterGestionEnvio from "../Views/GestionEnvios/Router/RouterGestionEnvio";
+import RouterPuntodeVenta from "../Views/PuntoVenta/Router/RouterPuntodeVenta"
 
 function RouterSync() {
   return (
@@ -24,14 +27,20 @@ function RouterSync() {
         <Route path="/bodegas/*" element={<RouterBodegas />} />
         <Route path="/reportes/*" element={<RouterReportes />} />
         <Route path="/info" element={<Info />} />
-        
+
+        {/* 👇 Nuevo módulo de envíos */}
+        <Route path="/envios" element={<GestionEnvios />} />
+        {/* 👇 Nuevo módulo de Punto de Venta */}
+        <Route path="/punto-de-venta/*" element={<RouterPuntodeVenta />} />
+
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/logout" element={<Logout />} />
         <Route path="/about" element={<About />} />
+        <Route path="/seleccionar-conexion" element={<SeleccionConexion />} />
+        <Route path="/envios/*" element={<RouterGestionEnvio />} />
 
-        <Route path="/seleccionar-conexion" element={<SeleccionConexion />} /> {/* <- NUEVA */}
-        
+
         <Route path="/*" element={<Navigate to="/sync/home" />} />
       </Routes>
     </LayoutSync>
