@@ -80,8 +80,10 @@ export const useEnviosTransito = () => {
 
       const response = await enviosTransitoService.fetchAviableReception(clientId);
       
-      if (response.status === "success" || response.status === "No hay envios en transito") {
-        setData(response.message);
+      if (response.status === "success") {
+        setData(response.data);
+      }else if(response.status === "No hay envios en transito"){
+        setData([])
       } else {
         throw new Error("Error al procesar los envíos");
       }

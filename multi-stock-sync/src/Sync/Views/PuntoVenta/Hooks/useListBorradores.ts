@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 
 import { ListVentaService, } from '../Services/listVentaService';
-import { VentaResponse, setVenta,FiltrosBackend } from '../Types/ventaTypes';
-
+import { VentaResponse,FiltrosBackend } from '../Types/ventaTypes';
+import { ItemVenta } from './GestionNuevaVenta';
 //datos a los que travez se va a filtrar
 
 
@@ -15,15 +15,15 @@ export const useListVentas = () => {
   const [clientId, setClientId] = useState<string>("");
 
   // funcion para traer los datos desde el service y setear el loading y el error
-  const fetchVentas = async (filtros: FiltrosBackend = {}) => {
+  const listBorradores = async (filtros: FiltrosBackend = {}) => {
     setLoading(true);
     setError(null);
     setSuccess(false);
 
     try {
       console.log(allData)
-      const clientId = JSON.parse(localStorage.getItem("conexionSeleccionada") || "{}")?.client_id;
-      setClientId(clientId)
+      setClientId(JSON.parse(localStorage.getItem("conexionSeleccionada") || "{}")?.client_id);
+
       if (!clientId) {
         throw new Error("No hay conexión seleccionada");
       }
@@ -46,54 +46,15 @@ export const useListVentas = () => {
     }
   };
 
-  // Función para aplicar filtros en el frontend
 
 
-  const cambiarEstadoVenta = async (ventaId: number, nuevoEstado: string, setventa:setVenta) => {
-    setLoading(true);
-    setSuccess(false);
-    setError(null);
-    try {
-      // aquí se se llama la funcion del service que llama a a la api
-      const response = await ListVentaService.actualizarEstadoVenta(
-        ventaId,
-        nuevoEstado,
-        setventa
-      );
-      // Actualizar el estado de la venta en el estado local
-      const actualizarVenta = (
-        ventasList: VentaResponse[]
-      ): VentaResponse[] => {
-        return ventasList.map((venta) => {
-          if (venta.id === ventaId) {
-            return { ...venta, status_sale: nuevoEstado };
-          }
-          return venta;
-        });
-      };
 
-      setAllData((prevAllData) => actualizarVenta(prevAllData));
-      setData((prevData) => actualizarVenta(prevData));
-
-      setSuccess(true);
-      return response.data;
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err
-          : new Error("Error al cambiar el estado de la venta")
-      );
-      console.error("Error al cambiar estado de venta:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
   const resetSuccess = () => {
     setSuccess(false);
   };
   // Cargar datos al iniciar
   useEffect(() => {
-    fetchVentas();
+    listBorradores();
   }, []);
 
   return {
@@ -103,7 +64,6 @@ export const useListVentas = () => {
     success,
     clientId,
     resetSuccess,
-    refetch: fetchVentas,
-    cambiarEstadoVenta,
+    refetch: listBorradores,
   };
 };

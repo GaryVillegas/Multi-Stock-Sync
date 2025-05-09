@@ -1,38 +1,38 @@
-//agregar cliente ------------------------
+// tipos de cliente
 export type ClientType = 1 | 2;
 
-   
+//interface de cliente natural persona
 export interface NaturalPerson {
-    tipo_cliente_id: 2;
-    nombres: string;
-    apellidos: string;
-    rut: string;
-    extranjero: number;
-    direccion: string;
-    ciudad: string;
-    comuna: string;
-    region: string; 
-  }
-  
-  export interface Company {
-    tipo_cliente_id: 1;
-    rut:string;
-    nombres: string;
-    apellidos: string;
-    razon_social: string;
-    giro:string;
-    extrajero: number;
-    direccion: string;
-    ciudad: string;
-    comuna: string;
-    region: string; 
-  }
+  tipo_cliente_id: 2;
+  nombres: string;
+  apellidos: string;
+  rut: string;
+  extranjero: number;
+  direccion: string;
+  ciudad: string;
+  comuna: string;
+  region: string;
+}
+//interface de cliente tipo empresa
+export interface Company {
+  tipo_cliente_id: 1;
+  rut: string;
+  nombres: string;
+  apellidos: string;
+  razon_social: string;
+  giro: string;
+  extrajero: number;
+  direccion: string;
+  ciudad: string;
+  comuna: string;
+  region: string;
+}
 
 
 export type ClientFormData = NaturalPerson | Company;
 
-
-export interface client{
+// interfaz de cliente sirve para mostrar y recibir los datos de la api a travez de cliente Response
+export interface client {
   apellidos: string;
   ciudad: string;
   comuna: string;
@@ -49,33 +49,11 @@ export interface client{
   updated_at: string;
 }
 
+// interface para recibir los datos de la api
 export interface ClientesResponse {
   status: "success" | "error";
   data: client[];
   message?: string;
 }
 
-
-//ventas---------------------------------
-// Define el tipo para las ventas
-export interface Venta {
-  id: number;
-  fecha: string;
-  cliente: {
-    id: number;
-    nombres: string;
-    apellidos: string;
-    razon_social: string;
-    tipo_cliente_id: number;
-  };
-  estado: string;
-  total: number;
-  productos: Array<{
-    id: number;
-    nombre: string;
-    cantidad: number;
-    precio_unitario: number;
-    subtotal: number;
-  }>;
-}
 

@@ -8,7 +8,7 @@ import {  EnviosTransitoResponse } from "../Types/EnviosProximos.Type";
 export const enviosTransitoService = {
   /**
    * Obtiene los envíos próximos desde la API
-   * @param {string} clientId - ID del cliente para el cual se obtienen los envíos
+   * clientId - ID del cliente para el cual se obtienen los envíos
    * @returns {Promise<EnviosResponse>} Respuesta con datos de envíos o mensaje de error
    */
   async fetchAviableReception(clientId: string): Promise<EnviosTransitoResponse> {
@@ -24,7 +24,7 @@ export const enviosTransitoService = {
       if (!response.data) {
         throw new Error("Error en la estructura de la respuesta.");
       }
-      
+      console.log("response.data:", response.data);
       // Si la respuesta está vacía o no tiene el formato esperado
       return response.data;
     } catch (error) {
@@ -33,7 +33,7 @@ export const enviosTransitoService = {
       // Manejo específico para errores de Axios
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
-        
+        console.log(error.response?.status);
         // No hay envíos disponibles (esto no debería ser un error, sino un estado válido)
         // Errores comunes de HTTP
         if (status === 401) {

@@ -9,7 +9,7 @@ import { LoadingDinamico } from "../../../../components/LoadingDinamico/LoadingD
 
 
 /**
- * Convierte la severidad del error a un tipo de alerta de Antd
+ * devuelve la severidad del error a la de alerta de Antd
  */
 const getAlertType = (severity: string) => {
   switch(severity) {
@@ -30,26 +30,79 @@ const EnviosProximos: React.FC = () => {
     return <LoadingDinamico variant="fullScreen" />;
   }
   const columns: ColumnsType<Enviostransito> = [
-    { title: "Id envio", dataIndex: "shipping_id", key: "id" },
-    { title: "Id producto", dataIndex: "productId", key: "id" },
-    { title: "Título", dataIndex: "title", key: "title" },
-    { title: "Cantidad", dataIndex: "quantity", key: "quantity" },
-   
-    { title: "Tamaño", dataIndex: "size", key: "size" },
- 
-   {
+    { 
+      title: "Id envio", 
+      dataIndex: "shipping_id", 
+      key: "id",
+      sorter: (a, b) => a.shipping_id.localeCompare(b.shipping_id)
+    },
+    { 
+      title: "Id producto", 
+      dataIndex: "productId", 
+      key: "id",
+      sorter: (a, b) => a.productId.localeCompare(b.productId)
+    },
+    { 
+      title: "Título", 
+      dataIndex: "title", 
+      key: "title",
+      sorter: (a, b) => a.title.localeCompare(b.title)
+    },
+    { 
+      title: "Cantidad", 
+      dataIndex: "quantity", 
+      key: "quantity",
+      sorter: (a, b) => a.quantity - b.quantity
+    },
+    { 
+      title: "Tamaño", 
+      dataIndex: "size", 
+      key: "size",
+      sorter: (a, b) => {
+        // Handle empty values
+        if (!a.size && !b.size) return 0;
+        if (!a.size) return -1;
+        if (!b.size) return 1;
+        return a.size.localeCompare(b.size);
+      }
+    },
+    {
       title: "Dirección",
-      dataIndex: ["receptor","dirrection"],
+      dataIndex: ["receptor", "dirrection"],
       key: "direccion",
-    },{
+      sorter: (a, b) => {
+        // Check if receptor exists
+        if (!a.receptor && !b.receptor) return 0;
+        if (!a.receptor) return -1;
+        if (!b.receptor) return 1;
+        
+        // Compare direction
+        return a.receptor.dirrection.localeCompare(b.receptor.dirrection);
+      }
+    },
+    {
       title: "N° Seguimiento",
       dataIndex: "tracking_number",
       key: "tracking_number",
+      sorter: (a, b) => {
+        // Handle empty tracking numbers
+        if (!a.tracking_number && !b.tracking_number) return 0;
+        if (!a.tracking_number) return -1;
+        if (!b.tracking_number) return 1;
+        return a.tracking_number.localeCompare(b.tracking_number);
+      }
     },
-    { 
-      title: "Estado", 
-      dataIndex: "substatus", 
+    {
+      title: "Estado",
+      dataIndex: "substatus",
       key: "status",
+      sorter: (a, b) => {
+        // Handle null values
+        if (!a.substatus && !b.substatus) return 0;
+        if (!a.substatus) return -1;
+        if (!b.substatus) return 1;
+        return a.substatus.localeCompare(b.substatus);
+      },
       render: (substatus: string) => {
         // Convertir "out of delivery" a "Enviado"
         const displayText = substatus === "out_for_delivery" ? "Enviado" : "Por enviar hoy";
@@ -66,7 +119,6 @@ const EnviosProximos: React.FC = () => {
         );
       }
     },
-    
   ];
 
   return (

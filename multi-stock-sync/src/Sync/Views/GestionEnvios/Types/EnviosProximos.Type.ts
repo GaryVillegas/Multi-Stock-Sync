@@ -16,6 +16,7 @@ export interface EnviosResponse {
   status: "success" | "error";
   data: Envio[];
   message?: string;
+  total_envios?: number;
 }
   
 

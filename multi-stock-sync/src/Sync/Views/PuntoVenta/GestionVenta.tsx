@@ -3,6 +3,7 @@ import { Tabs, Typography} from "antd";
 import type { TabsProps } from "antd";
 import NuevaVenta from "./Views/NuevaVenta";
 import  ListaVentas from "./Views/ListaVentas";
+//import ListaBorradores from "./Views/borradores"
 import BorradoresVenta from "./Views/BorradoresVenta";
 import ListaClientes from "./Views/ListaClientes";
 const { Title } = Typography;
@@ -33,7 +34,7 @@ const GestionVenta: React.FC = () => {
         {
             key: "borradores",
             label: "Borradores",
-            children: <BorradoresVenta />,
+            children: <BorradoresVenta/>,
         },{
             key:"clientes",
             label:"Clientes",

@@ -1,65 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Table, Card, Typography, Spin } from 'antd';
+import React, { useState,  } from 'react';
+import { Button, Table, Card, Typography, Alert } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import AgregarClienteDrawer from '../components/agregarClienteDrawer';
 import { useListCliente } from '../Hooks/useListCliente';
 import { ColumnsType } from 'antd/es/table';
 import { client } from '../Types/clienteTypes';
-
-const Toast = ({ message, type, onClose }: {
-  message: string;
-  type: 'success' | 'error' | 'info' | 'warning';
-  onClose: () => void
-}) => {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const backgroundColor = type === 'success' ? '#52c41a' :
-    type === 'error' ? '#f5222d' :
-      type === 'warning' ? '#faad14' : '#1890ff';
-
-  return (
-    <div style={{
-      position: 'fixed',
-      top: '20px',
-      right: '20px',
-      backgroundColor,
-      color: 'white',
-      padding: '10px 20px',
-      borderRadius: '4px',
-      boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-      zIndex: 1000,
-      maxWidth: '300px'
-    }}>
-      {message}
-    </div>
-  );
-};
+import { LoadingDinamico } from '../../../../components/LoadingDinamico/LoadingDinamico';
+//mostrar mensaje
 
 const { Title } = Typography;
 
 const ListaClientes: React.FC = () => {
+  // Estado para controlar la visibilidad del drawer
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const { data, loading, error, refetch } = useListCliente();
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
-  console.log(data)
+  //estados para obtener los clientes, el load para las pantallas de cargas, errores y la funcion de volver a recargar los datos
+  const { clientes, loadCliente,errorListCliente, errorCliente,success, refetch, clearError} = useListCliente();
+  // Estados para mostrar notificaciones
+
   // Función para abrir el drawer
   const showDrawer = () => {
     setDrawerVisible(true);
   };
 
   // Función para mostrar notificaciones
-  const showToast = (message: string | null, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
-    if (message) {
-      setToast({ message, type });
-      // No necesitamos este timeout aquí ya que el componente Toast tiene su propio timeout
-    }
-  };
+  
 
   // Función para cerrar el drawer
   const handleCloseDrawer = () => {
@@ -67,19 +31,16 @@ const ListaClientes: React.FC = () => {
   };
 
   // Función que se ejecuta cuando se registra un cliente exitosamente
-  const handleClienteRegistrado = (result: unknown) => {
-    console.log("Cliente registrado con éxito, refrescando lista...", result);
-    showToast("Cliente registrado correctamente", 'success');
+  const handleClienteRegistrado = () => {
     refetch();
     handleCloseDrawer(); // Cerrar el drawer después de registrar exitosamente
   };
 
   // Manejo de error en la carga de datos
-  useEffect(() => {
-    if (error) {
-      showToast(`Error al cargar clientes: ${error.message}`, 'error');
-    }
-  }, [error]);
+
+  if (loadCliente) {
+    return <LoadingDinamico variant="fullScreen" />;
+  }
 
   // Columnas para la tabla de clientes
   const columns: ColumnsType<client> = [
@@ -105,10 +66,14 @@ const ListaClientes: React.FC = () => {
       title: "Razon social",
       dataIndex: "razon_social",
       key: "razon_social",
-      render: (razonS: string) => (
+      render: (razonS: string, record: client) => (
         <span>
-          {razonS !== null || razonS !== "" || razonS !== undefined
-            ? razonS : "No aplica"}
+          {record.tipo_cliente_id === 2 ||
+          razonS === null ||
+          razonS === "" ||
+          razonS === undefined
+            ? "No aplica"
+            : razonS}
         </span>
       ),
     },
@@ -116,56 +81,90 @@ const ListaClientes: React.FC = () => {
       title: "Giro",
       dataIndex: "giro",
       key: "giro",
-      render: (razonS: string) => (
+      render: (giro: string, record: client) => (
         <span>
-          {razonS !== null || razonS !== "" || razonS !== undefined
-            ? razonS : "No aplica"}
+          {record.tipo_cliente_id === 2 ||
+          giro === null ||
+          giro === "" ||
+          giro === undefined
+            ? "No aplica"
+            : giro}
         </span>
       ),
     },
-
   ];
 
   return (
     <Card>
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+      {/* Mostrar mensaje de éxito si existe */}
+  {success && (
+    <Alert
+      message="Cliente registrado correctamente"
+      type="success"
+      showIcon
+      closable
+      onClose={clearError} // O una función específica para limpiar el éxito, si es necesario
+      style={{ marginBottom: "20px" }}
+    />
+  )}
+
+  {/* Mostrar mensaje de error si existe (errorCliente o errorListCliente) */}
+  {(errorCliente || errorListCliente) && (
+    <Alert
+      message={errorCliente || (errorListCliente && errorListCliente.message)}
+      type="error"
+      showIcon
+      closable
+      onClose={clearError}
+      action={
+        // Para errores de servidor, ofrece botón de recarga
+        (errorListCliente && errorListCliente.type === "server") && (
+          <Button
+            size="small"
+            type="primary"
+            onClick={() => window.location.reload()}
+          >
+            Recargar
+          </Button>
+        )
+      }
+      style={{ marginBottom: "20px" }}
+    />
+  )}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginBottom: 16,
+        }}
+      >
         <Title level={4}>Lista de Clientes</Title>
         <div>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={showDrawer}
-            disabled={loading}
+            disabled={loadCliente}
           >
             Nuevo Cliente
           </Button>
         </div>
       </div>
 
-      <Spin spinning={loading} tip="Cargando clientes...">
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={data}
-          pagination={{ pageSize: 10 }}
-          locale={{
-            emptyText: 'No hay clientes registrados'
-          }}
-        />
-      </Spin>
+      <Table
+        rowKey="id"
+        columns={columns}
+        dataSource={clientes}
+        pagination={{ pageSize: 10 }}
+        locale={{
+          emptyText: "No hay clientes registrados",
+        }}
+      />
 
       <AgregarClienteDrawer
         visible={drawerVisible}
         onClose={handleCloseDrawer}
         onSuccess={handleClienteRegistrado}
-        showToast={showToast}
       />
     </Card>
   );

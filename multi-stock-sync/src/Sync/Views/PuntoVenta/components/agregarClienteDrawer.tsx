@@ -4,7 +4,8 @@ import ClientTypeSelector from './seleccionTypeCliente';
 import NaturalPersonForm from './personaNaturalFormulario';
 import CompanyForm from './empresaFormulario';
 import { ClientFormData, ClientType, client } from '../Types/clienteTypes';
-import { UseAgregarCliente } from '../Hooks/useAgregarCliente';
+
+import { useListCliente } from '../Hooks/useListCliente';
 
 interface AgregarClienteDrawerProps {
   visible: boolean;
@@ -21,21 +22,19 @@ const AgregarClienteDrawer: React.FC<AgregarClienteDrawerProps> = ({
 }) => {
   const [clientType, setClientType] = useState<ClientType>(2);
   const [form] = Form.useForm<ClientFormData>();
-  const { registerNewClient, isLoading, error, success, clearError, clearSuccess } = UseAgregarCliente();
+  const { registerNewClient, isLoading, errorCliente, success, clearError, } = useListCliente();
 
   // Reset estados cuando el drawer se abre/cierra
   useEffect(() => {
     if (visible) {
       form.resetFields();
       clearError();
-      clearSuccess();
     }
-  }, [visible, clearError, clearSuccess, form]);
+  }, [visible, clearError, form]);
 
   const handleClose = () => {
     form.resetFields();
     clearError();
-    clearSuccess();
     onClose();
   };
 
@@ -55,7 +54,7 @@ const AgregarClienteDrawer: React.FC<AgregarClienteDrawerProps> = ({
     } catch (err) {
       console.error('Error en el formulario:', err);
       if (showToast) {
-        showToast(error ? `Error al registrar cliente: ${error}` : 'Error al registrar cliente', 'error');
+        showToast(errorCliente ? `Error al registrar cliente: ${errorCliente}` : 'Error al registrar cliente', 'error');
       }
     }
   };
@@ -90,14 +89,13 @@ const AgregarClienteDrawer: React.FC<AgregarClienteDrawerProps> = ({
               type="success" 
               showIcon 
               closable 
-              onClose={clearSuccess}
             />
           )}
           
-          {error && (
+          {errorCliente && (
             <Alert 
               message="Error" 
-              description={`Error al registrar cliente: ${error}`} 
+              description={`Error al registrar cliente: ${errorCliente}`} 
               type="error" 
               showIcon 
               closable 

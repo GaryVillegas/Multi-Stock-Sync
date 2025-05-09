@@ -24,9 +24,10 @@ export interface EstadoReceive{
     data:VentaResponse;
     message: string;
 }
-export interface products{
-  quantity:number;
-  unit_price:number;
+export interface products {
+  nombre?: string;
+  cantidad?: number;
+  unitPrice?:number;
 }
 export interface setVenta{
   type_emission:string;
@@ -38,5 +39,11 @@ export interface setVenta{
   price_final:number;
 }
 
+export interface FiltrosBackend {
+  client_id?: number;
+  date_start?: string;
+  status_sale?: string;
+  all_sale?: number;
+}
 
 

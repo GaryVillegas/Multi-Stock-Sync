@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
+/*import React, { useState, useEffect } from 'react';
 import { Button, Table, Card, Typography, message, DatePicker, Select, Input, Form, Space, Row, Col, Tag, Modal, Descriptions, Divider } from 'antd';
 import { SearchOutlined, EyeOutlined, EditOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useListVentas } from '../Hooks/useListVentas';
+import { ItemVenta } from './GestionNuevaVenta';
 //import type { DatePickerProps } from 'antd';
-
+import NuevaVentaModal from '../components/modalNuevaVenta'
 import { useListCliente } from '../Hooks/useListCliente';
 
 import type { VentaResponse, setVenta, products, FiltrosBackend } from '../Types/ventaTypes';
 import { LoadingDinamico } from '../../../../components/LoadingDinamico/LoadingDinamico';
+import { ItemVenta } from '../Hooks/GestionNuevaVenta';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -36,35 +38,22 @@ const ESTADOS_VENTA = [
 // view para lista de ventas
 const ListaVentas: React.FC = () => {
   const { clientes } = useListCliente();
-  //se establecen los filtros por defecto en indefinidos
   const [filtros, setFiltros] = useState<FiltrosBackend>({
     client_id: undefined,
     date_start: undefined,
     status_sale: undefined,
     all_sale: undefined,
   });
+
   console.log(filtros.date_start);
   const [form] = Form.useForm<FormValues>();
-  const [editVenta, setEditVenta] = useState<setVenta>({
-    type_emission: "",
-    warehouse_id: 0,
-    client_id: 0,
-    products: {
-      nombre:"",
-      cantidad: 0,
-      unitPrice: 0
-    },
-    amount_total_products: 0,
-    price_subtotal: 0,
-    price_final: 0
-  });
+
   const [detalleVisible, setDetalleVisible] = useState<boolean>(false);
-  const [ventaSeleccionada, setVentaSeleccionada] = useState<VentaResponse | null>(null);
-  const [cambioEstadoVisible, setCambioEstadoVisible] = useState<boolean>(false);
-  const [nuevoEstado, setNuevoEstado] = useState<string>('');
-  const [ventaIdParaCambio, setVentaIdParaCambio] = useState<number | null>(null);
+  const [ventaSeleccionada, setVentaSeleccionada] = useState<ItemVenta | null>(null);
+  const [modalPuntoVentaVisible, setModalPuntoVentaVisible] = useState<boolean>(false);
+
   // Hook personalizado para obtener las ventas
-  const { data, loading, error, success, resetSuccess, refetch, cambiarEstadoVenta } = useListVentas();
+  const { data, loading, error, success, resetSuccess, refetch, clientId } = useListVentas();
   // Función para aplicar filtros
   const [fechaInicio, setFechaInicio] = useState<string>('');
   const handleAplicarFiltros = (values: FormValues) => {
@@ -77,7 +66,7 @@ const ListaVentas: React.FC = () => {
       all_sale: allVenta
       // ...nuevosFiltros,
     };
-
+    
     setFiltros(nuevosFiltros);
     refetch(nuevosFiltros)
   };
@@ -117,7 +106,6 @@ const ListaVentas: React.FC = () => {
     setNuevoEstado(estadoActual);
     //se muestra el modal
     setVentaIdParaCambio(id)
-    setCambioEstadoVisible(true);
   };
 
 
@@ -131,21 +119,7 @@ const ListaVentas: React.FC = () => {
 
 
   // Función para confirmar cambio de estado
-  const confirmarCambioEstado = async (): Promise<void> => {
-    if (ventaIdParaCambio && nuevoEstado) {
-      try {
-        await cambiarEstadoVenta(ventaIdParaCambio, nuevoEstado, editVenta);
-        message.success('Estado de venta actualizado con éxito');
-        setCambioEstadoVisible(false);
-      } catch (error: unknown) {
-        if (error instanceof Error) {
-          message.error(error.message || 'Error al cambiar el estado de la venta');
-        } else {
-          message.error('Error desconocido');
-        }
-      }
-    }
-  };
+
 
   // Función para limpiar filtros
   const limpiarFiltros = (): void => {
@@ -361,7 +335,7 @@ const ListaVentas: React.FC = () => {
         <Title level={4}>Historial de Ventas</Title>
 
       </div>
-      {/* Formulario de filtros */}
+      {/* Formulario de filtros 
       <Form
         form={form}
         layout="vertical"
@@ -451,7 +425,7 @@ const ListaVentas: React.FC = () => {
         </Row>
       </Form>
 
-      {/*tabla que muestra la lista de ventas */}
+      {/*tabla que muestra la lista de ventas 
       <Table
         rowKey="id"
         columns={columns}
@@ -462,8 +436,7 @@ const ListaVentas: React.FC = () => {
         }}
       />
 
-      {/* Modal para mostrar detalles de la venta */}
-      <Modal
+      {/* Modal para mostrar detalles de la venta       <Modal
         title={`Detalle de Venta #${ventaSeleccionada?.id || ""}`}
         open={detalleVisible}
         onCancel={cerrarDetalle}
@@ -541,32 +514,21 @@ const ListaVentas: React.FC = () => {
           </>
         )}
       </Modal>
-      <Modal
-        title="Cambiar Estado de Venta"
-        open={cambioEstadoVisible}
-        onCancel={() => setCambioEstadoVisible(false)}
-        onOk={confirmarCambioEstado}
-        okText="Confirmar"
-        cancelText="Cancelar"
-      >
-        <Form layout="vertical">
-          <Form.Item label="Nuevo Estado">
-            <Select
-              value={nuevoEstado}
-              onChange={(value) => setNuevoEstado(value)}
-              style={{ width: "100%" }}
-            >
-              {ESTADOS_VENTA.map((estado) => (
-                <Option key={estado.value} value={estado.value}>
-                  {estado.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-        </Form>
-      </Modal>
+      <NuevaVentaModal
+        clientId={clientId}
+        venta={ventaSeleccionada}
+        visible={modalPuntoVentaVisible}
+        onCancel={() => setModalPuntoVentaVisible(false)}
+        onSuccess={() => {
+          
+          console.log('Venta creada con éxito');
+          setModalPuntoVentaVisible(false)
+        }}
+      />
     </Card>
+    
+   
   );
 };
 
-export default ListaVentas;
+/*export default ListaVentas;*/
