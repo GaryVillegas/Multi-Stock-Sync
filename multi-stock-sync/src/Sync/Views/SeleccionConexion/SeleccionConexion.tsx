@@ -11,11 +11,24 @@ const SeleccionConexion: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    console.log("🧪 TOKEN ENCONTRADO:", token);
+
+    // Validar que haya token
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    // ✅ Llamar solo si no hay conexión seleccionada
+    const conexionSeleccionada = localStorage.getItem("conexionSeleccionada");
+    if (conexionSeleccionada) {
+      console.log("✅ Ya hay una tienda seleccionada, no se listan conexiones");
+      return;
+    }
+
     async function fetchConexiones() {
       try {
-        const token = localStorage.getItem("token");
-        console.log("🧪 TOKEN ENCONTRADO:", token);
-
         const response = await axios.get(`${import.meta.env.VITE_API_URL}/mercadolibre/conexionToken`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -38,23 +51,13 @@ const SeleccionConexion: React.FC = () => {
                 }
               );
 
-              if (refreshResponse.data.status === "success") {
-                return {
-                  ...conexion,
-                  tokenVigente: true,
-                };
-              } else {
-                return {
-                  ...conexion,
-                  tokenVigente: false,
-                };
-              }
-            } catch (e) {
-              console.warn(`⚠️ Falló la conexión para ${conexion.nickname}`);
               return {
                 ...conexion,
-                tokenVigente: false,
+                tokenVigente: refreshResponse.data.status === "success",
               };
+            } catch (e) {
+              console.warn(`⚠️ Falló la conexión para ${conexion.nickname}`);
+              return { ...conexion, tokenVigente: false };
             }
           })
         );

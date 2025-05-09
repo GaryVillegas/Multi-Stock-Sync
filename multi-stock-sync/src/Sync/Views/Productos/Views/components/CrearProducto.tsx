@@ -12,7 +12,6 @@ import {
 } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
 import { useCrearProducto } from "../hook/useCrearProducto";
-// ✅ Ruta corregida
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -77,7 +76,11 @@ const CrearProducto: React.FC = () => {
         </Form.Item>
 
         {catalogProducts.length > 0 && (
-          <Form.Item name="catalog_product_id" label="Producto del catálogo" rules={[{ required: true }]}>
+          <Form.Item
+            name="catalog_product_id"
+            label="Producto del catálogo"
+            rules={[{ required: true }]}
+          >
             <Select
               showSearch
               onChange={(value: string) => setCatalogProductId(value)}
@@ -148,7 +151,7 @@ const CrearProducto: React.FC = () => {
 
         {!catalogProductId && (
           <Form.Item name="description" label="Descripción" rules={[{ required: true }]}>
-            <TextArea rows={4} />
+            <TextArea rows={4} placeholder="Describe tu producto..." />
           </Form.Item>
         )}
 
