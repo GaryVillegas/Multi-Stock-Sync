@@ -8,7 +8,7 @@ import {
   Spin,
   Typography,
   Modal,
-  Divider
+  Divider,
 } from "antd";
 import { Line } from "react-chartjs-2";
 import axiosInstance from "../../../../../axiosConfig";
@@ -23,9 +23,9 @@ import {
   Legend,
 } from "chart.js";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import autoTable from "jspdf-autotable";
 
 ChartJS.register(
   CategoryScale,
@@ -40,218 +40,364 @@ ChartJS.register(
 const { Option } = Select;
 const { Text, Title: AntTitle } = Typography;
 
-interface Product {
-  title: string;
-  quantity: number;
-  price: number;
-}
-
-interface Order {
-  id: string;
-  created_date: string;
-  total_amount: number;
-  status: string;
-  products: Product[];
-}
-
-interface MonthlySalesData {
+interface CompanySalesData {
   total_sales: number;
-  orders: Order[];
+  total_products: number;
+  company_name: string;
 }
 
 interface ApiResponse {
   status: string;
   message: string;
-  sales_by_company: {
-    [companyId: string]: {
-      [monthKey: string]: MonthlySalesData;
-    };
+  sales_by_company: CompanySalesData[][];
+  total_sales: number;
+  date_range: {
+    from: string;
+    to: string;
   };
 }
 
-interface CombinedMonthlyData {
-  [monthKey: string]: MonthlySalesData;
+interface CurrentMonthAggregatedData {
+  total_sales: number;
+  companies_data: CompanySalesData[];
 }
 
 const GananciasMensuales = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [combinedData, setCombinedData] = useState<CombinedMonthlyData | null>(null);
-  const [selectedYear, setSelectedYear] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const [currentMonthAggregatedData, setCurrentMonthAggregatedData] =
+    useState<CurrentMonthAggregatedData | null>(null);
+  const [availableYears, setAvailableYears] = useState<string[]>([]);
+  const [selectedYear, setSelectedYear] = useState(() =>
+    new Date().getFullYear().toString()
+  );
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const currentFullYear = new Date().getFullYear();
+    const currentMonthNum = (new Date().getMonth() + 1)
+      .toString()
+      .padStart(2, "0");
+    return `${currentFullYear}-${currentMonthNum}`;
+  });
   const [chartData, setChartData] = useState<any>(null);
-
-  const chartRef = useRef<HTMLDivElement>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
+  const chartRef = useRef<HTMLDivElement>(null);
+
   const monthNames = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
   ];
 
-  const fetchSalesData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axiosInstance.get<ApiResponse>(
-        `${import.meta.env.VITE_API_URL}/mercadolibre/get-total-sales-all-companies`
-      );
-      console.log("Respuesta completa de la API:", response.data);
-      
-      const data = response.data;
-
-      if (!data || data.status !== "success") {
-        throw new Error(data.message || "La API no devolvió datos válidos");
-      }
-
-      
-      const combined: CombinedMonthlyData = {};
-      
-      Object.values(data.sales_by_company).forEach(companyData => {
-        Object.entries(companyData).forEach(([monthKey, monthData]) => {
-          if (!combined[monthKey]) {
-            combined[monthKey] = {
-              total_sales: 0,
-              orders: []
-            };
-          }
-          combined[monthKey].total_sales += monthData.total_sales;
-          combined[monthKey].orders = [...combined[monthKey].orders, ...monthData.orders];
-        });
-      });
-
-      setCombinedData(combined);
-
-      const months = Object.keys(combined).sort();
-      if (months.length > 0) {
-        const [year] = months[0].split('-');
-        setSelectedYear(year);
-        setSelectedMonth(months[0]);
-        generateChart(months[0], combined);
-      }
-
-    } catch (error) {
-      console.error("Error al cargar datos:", error);
-      setError(error instanceof Error ? error.message : "Error al cargar datos");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const getAvailableYears = () => {
-    if (!combinedData) return [];
-    
-    return Object.keys(combinedData)
-      .map(key => key.split("-")[0])
-      .filter((year, index, self) => self.indexOf(year) === index)
-      .sort((a, b) => b.localeCompare(a));
-  };
-
-  const getAvailableMonths = () => {
-  if (!selectedYear || !combinedData) return [];
-  
-  const months = Object.keys(combinedData)
-    .filter(key => key.startsWith(`${selectedYear}-`))
-    .sort(); 
-
-  console.log('Meses disponibles:', months); 
-
-  return months.map(key => {
-    const monthNum = parseInt(key.split("-")[1]);
-    return {
-      value: key,
-      label: monthNames[monthNum - 1]
-    };
-  });
-};
-
-  const generateChart = (month = selectedMonth, data = combinedData) => {
-    if (!month || !data) return;
-
-    const monthData = data[month];
-    if (!monthData) return;
-
-    const dailySales = monthData.orders.reduce((acc, order) => {
-      const date = new Date(order.created_date).toLocaleDateString();
-      acc[date] = (acc[date] || 0) + order.total_amount;
-      return acc;
-    }, {} as Record<string, number>);
-
-    setChartData({
-      labels: Object.keys(dailySales),
-      datasets: [
-        {
-          label: "Ventas Diarias Totales ($)",
-          data: Object.values(dailySales),
-          borderColor: "#1890ff",
-          backgroundColor: "rgba(24, 144, 255, 0.2)",
-          tension: 0.4
-        }
-      ]
-    });
-  };
-
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = useCallback((amount: number) => {
     return new Intl.NumberFormat("es-CL", {
       style: "currency",
-      currency: "CLP"
+      currency: "CLP",
     }).format(amount);
-  };
+  }, []);
 
-  const getCurrentMonthData = () => combinedData?.[selectedMonth] || null;
+  const getCurrentMonthData = useCallback(
+    () => currentMonthAggregatedData,
+    [currentMonthAggregatedData]
+  );
 
-  const generatePDF = async () => {
-    if (!chartRef.current) return;
-
-    const canvas = await html2canvas(chartRef.current);
-    const imgData = canvas.toDataURL("image/png");
-
-    const pdf = new jsPDF();
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`Ganancias_Totales_${selectedMonth}.pdf`);
-
-    const pdfBlob = pdf.output("blob");
-    const pdfBlobUrl = URL.createObjectURL(pdfBlob);
-    setPdfUrl(pdfBlobUrl);
-  };
-
-  const generateExcel = () => {
-    const monthData = getCurrentMonthData();
-    if (!monthData || monthData.orders.length === 0) return;
-
-    const worksheetData = monthData.orders.map(order => ({
-      ID_Pedido: order.id,
-      Fecha_Creación: new Date(order.created_date).toLocaleString(),
-      Monto_Total: order.total_amount,
-      Estado: order.status,
-      Productos: order.products.map(p => `${p.title} (x${p.quantity})`).join("; "),
-      Precio_Unitario: order.products.map(p => p.price).join("; ")
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Ventas");
-
-    const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-    const dataBlob = new Blob([excelBuffer], { type: "application/octet-stream" });
-
-    saveAs(dataBlob, `Ganancias_Totales_${selectedMonth}.xlsx`);
-  };
-
-  useEffect(() => {
-    if (selectedMonth) {
-      generateChart();
+  const populateAvailableYears = useCallback(() => {
+    const currentFullYear = new Date().getFullYear();
+    const years = [];
+    for (let i = currentFullYear; i >= currentFullYear - 4; i--) {
+      years.push(i.toString());
     }
-  }, [selectedMonth]);
+    setAvailableYears(years.sort((a, b) => b.localeCompare(a)));
+  }, []);
+
+  const fetchSalesData = useCallback(
+    async (year: string, month: string) => {
+      if (!year || !month) {
+        setCurrentMonthAggregatedData(null);
+        setChartData(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await axiosInstance.get<ApiResponse>(
+          `${import.meta.env.VITE_API_URL}/mercadolibre/get-total-sales-all-companies`,
+          { params: { year, month: month.split("-")[1] } }
+        );
+
+        const data = response.data;
+
+        if (!data || data.status !== "success") {
+          throw new Error(
+            data.message || "La API no devolvió una respuesta exitosa."
+          );
+        }
+
+        if (data.sales_by_company && data.sales_by_company.length > 0) {
+          setCurrentMonthAggregatedData({
+            total_sales: data.total_sales,
+            companies_data: data.sales_by_company[0] 
+          });
+        } else {
+          setCurrentMonthAggregatedData(null);
+          setChartData(null);
+        }
+      } catch (err) {
+        console.error("Error al cargar datos de ventas:", err);
+        setError(err instanceof Error ? err.message : "Error al cargar datos.");
+        setCurrentMonthAggregatedData(null);
+        setChartData(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  const generateChart = useCallback((companiesData: CompanySalesData[]) => {
+    if (!companiesData || companiesData.length === 0) {
+      setChartData(null);
+      return;
+    }
+
+    // Como no tenemos datos diarios, crearemos un gráfico simple de comparación por empresa
+    const accountColors = {
+      "COMERCIALIZADORAABIZICL": "#1890ff",
+      "CRAZYFAMILY": "#52c41a",
+      "OFERTASIMPERDIBLESCHILE": "#faad14",
+      "LENCERIAONLINE": "#f5222d",
+      "Cuenta desconocida": "#722ed1",
+    };
+
+    const datasets = [{
+      label: "Ventas por Empresa ($)",
+      data: companiesData.map(company => company.total_sales),
+      backgroundColor: companiesData.map(company => 
+        accountColors[company.company_name as keyof typeof accountColors] || "#1890ff"
+      ),
+      borderColor: companiesData.map(company => 
+        accountColors[company.company_name as keyof typeof accountColors] || "#1890ff"
+      ),
+      borderWidth: 1
+    }];
+
+    setChartData({
+      labels: companiesData.map(company => company.company_name),
+      datasets,
+    });
+  }, []);
+
+  const getAvailableMonths = useCallback(() => {
+    return monthNames.map((name, index) => {
+      const monthNum = (index + 1).toString().padStart(2, "0");
+      const monthKey = `${selectedYear}-${monthNum}`;
+      return {
+        value: monthKey,
+        label: name,
+      };
+    });
+  }, [selectedYear, monthNames]);
+
+  const generatePDF = useCallback(async () => {
+    try {
+      const monthData = getCurrentMonthData();
+      if (!monthData) return;
+
+      const pdf = new jsPDF();
+
+      pdf.setFontSize(18);
+      pdf.setTextColor(40, 40, 40);
+      pdf.text(
+        `Reporte de Ganancias Consolidadas - ${
+          monthNames[parseInt(selectedMonth.split("-")[1]) - 1]
+        } ${selectedYear}`,
+        105,
+        15,
+        { align: "center" }
+      );
+
+      pdf.setFontSize(12);
+      pdf.text(`Ganancias totales de todas las cuentas`, 105, 25, {
+        align: "center",
+      });
+
+      const summaryColumns = ["Cuenta", "Total Ventas", "Total Productos"];
+      const summaryRows = monthData.companies_data.map((companyData) => [
+        companyData.company_name,
+        formatCurrency(companyData.total_sales),
+        companyData.total_products.toString()
+      ]);
+
+      summaryRows.push([
+        "TOTAL GENERAL",
+        formatCurrency(monthData.total_sales),
+        monthData.companies_data.reduce((sum, company) => sum + company.total_products, 0).toString()
+      ]);
+
+      autoTable(pdf, {
+        head: [summaryColumns],
+        body: summaryRows,
+        startY: 35,
+        theme: "grid",
+        headStyles: {
+          fillColor: [106, 48, 147],
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        styles: {
+          fontSize: 10,
+          cellPadding: 3,
+        },
+        margin: { left: 5, right: 5 },
+        columnStyles: {
+          1: { halign: "right" },
+          2: { halign: "right" }
+        },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 0) {
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
+        willDrawCell: (data) => {
+          if (data.row.index === summaryRows.length - 1) {
+            data.cell.styles.fillColor = [106, 48, 147];
+            data.cell.styles.textColor = 255;
+            data.cell.styles.fontStyle = "bold";
+          }
+        },
+      });
+
+      pdf.setFontSize(14);
+      pdf.setTextColor(40, 40, 40);
+      pdf.text(
+        `Total General del Mes: ${formatCurrency(monthData.total_sales)}`,
+        105,
+        (pdf as any).lastAutoTable.finalY + 10,
+        { align: "center" }
+      );
+
+      const pdfBlob = pdf.output("blob");
+      const pdfBlobUrl = URL.createObjectURL(pdfBlob);
+      setPdfUrl(pdfBlobUrl);
+    } catch (err) {
+      console.error("Error generating PDF:", err);
+      setError("Error al generar el PDF.");
+    }
+  }, [selectedMonth, selectedYear, formatCurrency, getCurrentMonthData, monthNames]);
+
+  const generateExcel = useCallback(() => {
+    try {
+      const monthData = getCurrentMonthData();
+      if (!monthData || monthData.companies_data.length === 0) {
+        console.warn("No data to generate Excel.");
+        return;
+      }
+
+      // Crear workbook
+      const workbook = XLSX.utils.book_new();
+
+      // 1. Hoja de Resumen (formato de tabla)
+      const summaryData = [
+        ["Cuenta", "Total Ventas", "Formateado", "Total Productos"],
+        ...monthData.companies_data.map((companyData) => [
+          companyData.company_name,
+          companyData.total_sales,
+          formatCurrency(companyData.total_sales),
+          companyData.total_products
+        ]),
+        [
+          "TOTAL GENERAL",
+          monthData.total_sales,
+          formatCurrency(monthData.total_sales),
+          monthData.companies_data.reduce((sum, company) => sum + company.total_products, 0)
+        ]
+      ];
+
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      
+      // Añadir estilo a la hoja de resumen
+      if (summarySheet["!ref"]) {
+        const range = XLSX.utils.decode_range(summarySheet["!ref"]);
+        
+        // Estilo para encabezados
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const headerCell = XLSX.utils.encode_cell({r: range.s.r, c: C});
+          if (!summarySheet[headerCell]) continue;
+          summarySheet[headerCell].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "6A3093" } },
+            alignment: { horizontal: "center" }
+          };
+        }
+
+        // Estilo para total general
+        const totalRow = range.e.r;
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const totalCell = XLSX.utils.encode_cell({r: totalRow, c: C});
+          if (!summarySheet[totalCell]) continue;
+          summarySheet[totalCell].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "6A3093" } }
+          };
+        }
+
+        // Formato numérico para columna de montos
+        for (let R = range.s.r + 1; R < range.e.r; ++R) {
+          const amountCell = XLSX.utils.encode_cell({r: R, c: 1});
+          if (summarySheet[amountCell]) {
+            summarySheet[amountCell].z = '"$"#,##0.00;[Red]\-"$"#,##0.00';
+          }
+        }
+      }
+
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Resumen");
+
+      // Generar archivo Excel
+      const excelBuffer = XLSX.write(workbook, {
+        bookType: "xlsx",
+        type: "array",
+        bookSST: true
+      });
+      
+      const blob = new Blob([excelBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      });
+
+      saveAs(blob, `Ganancias_Consolidadas_${selectedMonth}.xlsx`);
+    } catch (err) {
+      console.error("Error generating Excel:", err);
+      setError("Error al generar el archivo Excel.");
+    }
+  }, [getCurrentMonthData, selectedMonth, formatCurrency]);
 
   useEffect(() => {
-    fetchSalesData();
-  }, [fetchSalesData]);
+    populateAvailableYears();
+  }, [populateAvailableYears]);
+
+  useEffect(() => {
+    if (selectedYear && selectedMonth) {
+      fetchSalesData(selectedYear, selectedMonth);
+    }
+  }, [selectedYear, selectedMonth, fetchSalesData]);
+
+  useEffect(() => {
+    if (currentMonthAggregatedData) {
+      generateChart(currentMonthAggregatedData.companies_data);
+    } else {
+      setChartData(null);
+    }
+  }, [currentMonthAggregatedData, generateChart]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -274,19 +420,22 @@ const GananciasMensuales = () => {
         />
       )}
 
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={12}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12}>
           <Select
             placeholder="Seleccione un año"
             style={{ width: "100%" }}
             onChange={(value) => {
               setSelectedYear(value);
-              setSelectedMonth("");
+              const monthPart = selectedMonth
+                ? selectedMonth.split("-")[1]
+                : (new Date().getMonth() + 1).toString().padStart(2, "0");
+              setSelectedMonth(`${value}-${monthPart}`);
             }}
-            value={selectedYear}
+            value={selectedYear || undefined}
             loading={loading}
           >
-            {getAvailableYears().map(year => (
+            {availableYears.map((year) => (
               <Option key={year} value={year}>
                 {year}
               </Option>
@@ -294,24 +443,29 @@ const GananciasMensuales = () => {
           </Select>
         </Col>
 
-        <Col span={12}>
+        <Col xs={24} sm={12}>
           <Select
             placeholder="Seleccione un mes"
             style={{ width: "100%" }}
-            onChange={setSelectedMonth}
-            value={selectedMonth}
-            disabled={!selectedYear}
+            onChange={(value) => {
+              setSelectedMonth(value);
+            }}
+            value={selectedMonth || undefined}
+            disabled={!selectedYear || getAvailableMonths().length === 0}
             options={getAvailableMonths()}
           />
         </Col>
       </Row>
 
-      {chartData && selectedMonth && (
+      {chartData && selectedMonth && currentMonthAggregatedData ? (
         <Card
-          title={`Ventas Mensuales Totales - ${monthNames[parseInt(selectedMonth.split("-")[1]) - 1]} ${selectedMonth.split("-")[0]}`}
+          title={`Ganancias Mensuales Consolidadas - ${
+            monthNames[parseInt(selectedMonth.split("-")[1]) - 1]
+          } ${selectedYear}`}
           extra={
             <Text strong>
-              Total: {formatCurrency(getCurrentMonthData()?.total_sales || 0)}
+              Total Consolidado:{" "}
+              {formatCurrency(currentMonthAggregatedData.total_sales || 0)}
             </Text>
           }
         >
@@ -330,139 +484,210 @@ const GananciasMensuales = () => {
                           return formatCurrency(value);
                         }
                         return value;
-                      }
-                    }
-                  }
+                      },
+                    },
+                  },
                 },
                 plugins: {
                   tooltip: {
                     callbacks: {
                       label: (context) => {
-                        return ` ${context.dataset.label}: ${formatCurrency(context.raw as number)}`;
-                      }
-                    }
-                  }
-                }
+                        return ` ${
+                          context.dataset.label
+                        }: ${formatCurrency(context.raw as number)}`;
+                      },
+                    },
+                  },
+                  legend: {
+                    position: "bottom",
+                    labels: {
+                      boxWidth: 12,
+                      padding: 20,
+                    },
+                  },
+                },
               }}
             />
           </div>
 
-          <div style={{ marginTop: 24, display: "flex", gap: 12 }}>
-            <button
-              type="button"
-              onClick={generatePDF}
-              className="btn w-100 py-2 fw-medium rounded-pill shadow-sm position-relative overflow-hidden mb-3"
-              style={{ 
-                backgroundColor: 'white',
-                color: '#6a3093',
-                border: '2px solid #ba68c8',
-                transition: 'all 0.3s',
-                zIndex: 1
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.color = 'white';
-                e.currentTarget.style.borderColor = '#6a3093';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.color = '#6a3093';
-                e.currentTarget.style.borderColor = '#ba68c8';
-              }}
-            >
-              <span style={{ position: 'relative', zIndex: 2 }}>
-                <i className="fas fa-file-pdf me-2"></i> Descargar PDF
-              </span>
-              <span style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '0%',
-                height: '100%',
-                backgroundColor: '#6a3093',
-                transition: 'all 0.3s ease',
-                zIndex: 0
-              }}></span>
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                await generatePDF();
-                setIsModalVisible(true);
-              }}
-              className="btn w-100 py-2 fw-medium rounded-pill shadow-sm position-relative overflow-hidden mb-3"
-              style={{ 
-                backgroundColor: 'white',
-                color: '#6a3093',
-                border: '2px solid #ba68c8',
-                transition: 'all 0.3s',
-                zIndex: 1
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.color = 'white';
-                e.currentTarget.style.borderColor = '#6a3093';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.color = '#6a3093';
-                e.currentTarget.style.borderColor = '#ba68c8';
-              }}
-            >
-              <span style={{ position: 'relative', zIndex: 2 }}>
-                <i className="fas fa-eye me-2"></i> Visualizar PDF
-              </span>
-              <span style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '0%',
-                height: '100%',
-                backgroundColor: '#6a3093',
-                transition: 'all 0.3s ease',
-                zIndex: 0
-              }}></span>
-            </button>
-            <button
-              type="button"
-              onClick={generateExcel}
-              className="btn w-100 py-2 fw-medium rounded-pill shadow-sm position-relative overflow-hidden mb-3"
-              style={{ 
-                backgroundColor: 'white',
-                color: '#6a3093',
-                border: '2px solid #ba68c8',
-                transition: 'all 0.3s',
-                zIndex: 1
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.color = 'white';
-                e.currentTarget.style.borderColor = '#6a3093';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.color = '#6a3093';
-                e.currentTarget.style.borderColor = '#ba68c8';
-              }}
-            >
-              <span style={{ position: 'relative', zIndex: 2 }}>
-                <i className="fas fa-file-excel me-2"></i> Descargar Excel
-              </span>
-              <span style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '0%',
-                height: '100%',
-                backgroundColor: '#6a3093',
-                transition: 'all 0.3s ease',
-                zIndex: 0
-              }}></span>
-            </button>
-          </div>
+          {currentMonthAggregatedData.companies_data && (
+            <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+              <Col span={24}>
+                <Divider orientation="left">Resumen por Cuenta</Divider>
+                <Row gutter={[16, 16]}>
+                  {currentMonthAggregatedData.companies_data.map(
+                    (companyData, index) => (
+                      <Col xs={24} sm={12} md={6} key={index}>
+                        <Card
+                          size="small"
+                          title={companyData.company_name}
+                          headStyle={{ backgroundColor: "#f0f0f0" }}
+                        >
+                          <Text strong style={{ fontSize: 16 }}>
+                            {formatCurrency(companyData.total_sales)}
+                          </Text>
+                          <div style={{ marginTop: 8 }}>
+                            <Text type="secondary">Productos: {companyData.total_products}</Text>
+                          </div>
+                        </Card>
+                      </Col>
+                    )
+                  )}
+                </Row>
+              </Col>
+            </Row>
+          )}
+
+          <Row gutter={[12, 12]} style={{ marginTop: 24 }} justify="center">
+            <Col xs={24} sm={8} lg={6}>
+              <button
+                type="button"
+                onClick={generatePDF}
+                className="btn w-100 py-2 fw-medium rounded-pill shadow-sm position-relative overflow-hidden mb-3 export-button"
+                style={{
+                  backgroundColor: "white",
+                  color: "#6a3093",
+                  border: "2px solid #ba68c8",
+                  transition: "all 0.3s",
+                  zIndex: 1,
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.color = "white";
+                  e.currentTarget.style.borderColor = "#6a3093";
+                  (e.currentTarget.children[1] as HTMLElement).style.width =
+                    "100%";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.color = "#6a3093";
+                  e.currentTarget.style.borderColor = "#ba68c8";
+                  (e.currentTarget.children[1] as HTMLElement).style.width =
+                    "0%";
+                }}
+              >
+                <span style={{ position: "relative", zIndex: 2 }}>
+                  <i className="fas fa-file-pdf me-2"></i> Descargar PDF
+                </span>
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "0%",
+                    height: "100%",
+                    backgroundColor: "#6a3093",
+                    transition: "all 0.3s ease",
+                    zIndex: 0,
+                  }}
+                ></span>
+              </button>
+            </Col>
+            <Col xs={24} sm={8} lg={6}>
+              <button
+                type="button"
+                onClick={async () => {
+                  await generatePDF();
+                  setIsModalVisible(true);
+                }}
+                className="btn w-100 py-2 fw-medium rounded-pill shadow-sm position-relative overflow-hidden mb-3 export-button"
+                style={{
+                  backgroundColor: "white",
+                  color: "#6a3093",
+                  border: "2px solid #ba68c8",
+                  transition: "all 0.3s",
+                  zIndex: 1,
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.color = "white";
+                  e.currentTarget.style.borderColor = "#6a3093";
+                  (e.currentTarget.children[1] as HTMLElement).style.width =
+                    "100%";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.color = "#6a3093";
+                  e.currentTarget.style.borderColor = "#ba68c8";
+                  (e.currentTarget.children[1] as HTMLElement).style.width =
+                    "0%";
+                }}
+              >
+                <span style={{ position: "relative", zIndex: 2 }}>
+                  <i className="fas fa-eye me-2"></i> Visualizar PDF
+                </span>
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "0%",
+                    height: "100%",
+                    backgroundColor: "#6a3093",
+                    transition: "all 0.3s ease",
+                    zIndex: 0,
+                  }}
+                ></span>
+              </button>
+            </Col>
+            <Col xs={24} sm={8} lg={6}>
+              <button
+                type="button"
+                onClick={generateExcel}
+                className="btn w-100 py-2 fw-medium rounded-pill shadow-sm position-relative overflow-hidden mb-3 export-button"
+                style={{
+                  backgroundColor: "white",
+                  color: "#6a3093",
+                  border: "2px solid #ba68c8",
+                  transition: "all 0.3s",
+                  zIndex: 1,
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.color = "white";
+                  e.currentTarget.style.borderColor = "#6a3093";
+                  (e.currentTarget.children[1] as HTMLElement).style.width =
+                    "100%";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.color = "#6a3093";
+                  e.currentTarget.style.borderColor = "#ba68c8";
+                  (e.currentTarget.children[1] as HTMLElement).style.width =
+                    "0%";
+                }}
+              >
+                <span style={{ position: "relative", zIndex: 2 }}>
+                  <i className="fas fa-file-excel me-2"></i> Descargar Excel
+                </span>
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "0%",
+                    height: "100%",
+                    backgroundColor: "#6a3093",
+                    transition: "all 0.3s ease",
+                    zIndex: 0,
+                  }}
+                ></span>
+              </button>
+            </Col>
+          </Row>
         </Card>
+      ) : !loading && !error && (
+        <Alert
+          message="Información"
+          description="No hay datos de ventas disponibles para el mes seleccionado."
+          type="info"
+          showIcon
+          style={{ marginBottom: 24 }}
+        />
       )}
 
       <Modal
-        title="Vista previa del PDF"
+        title={`Vista previa del PDF - Ganancias Consolidadas ${
+          monthNames[parseInt(selectedMonth?.split("-")[1]) - 1]
+        } ${selectedYear}`}
         open={isModalVisible}
         onCancel={() => setIsModalVisible(false)}
         footer={null}
-        width="80%"
+        width="90%"
         style={{ top: 20 }}
       >
         {pdfUrl ? (
