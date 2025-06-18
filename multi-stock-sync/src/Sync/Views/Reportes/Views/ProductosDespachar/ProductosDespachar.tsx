@@ -8,14 +8,17 @@ import {
   Container,
   Modal,
   Spinner,
-  Badge, // Importa Badge
+  Badge,
 } from "react-bootstrap";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import styles from "./Despacho.module.css";
-// Importa el ícono que usaremos
-import { BsBoxSeam } from "react-icons/bs";
+import { 
+  FilePdfOutlined, 
+  FileExcelOutlined,
+  BoxPlotOutlined 
+} from "@ant-design/icons";
 
 const ProductosDespachar: React.FC = () => {
   const { client_id } = useParams();
@@ -51,7 +54,6 @@ const ProductosDespachar: React.FC = () => {
         } else {
           setProductos([]);
           setProductosOriginal([]);
-          // No establecemos error aquí, la tabla mostrará que no hay productos
         }
       } catch {
         setError("Error al conectar con la API. Intente de nuevo más tarde.");
@@ -64,7 +66,7 @@ const ProductosDespachar: React.FC = () => {
     fetchData();
   }, [client_id]);
 
-  // Filtrado en tiempo real al escribir en el input de búsqueda
+  // Filtrado en tiempo real al escribir
   useEffect(() => {
     const filtrados = productosOriginal.filter(
       (p) =>
@@ -88,7 +90,7 @@ const ProductosDespachar: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, ws, "Despacho");
     XLSX.writeFile(wb, "productos_despachar.xlsx");
   };
-
+  // Funcion para exportar a PDF
   const exportToPDF = () => {
     const doc = new jsPDF();
     doc.text("Productos Listos para Despacho", 14, 10);
@@ -111,7 +113,7 @@ const ProductosDespachar: React.FC = () => {
     doc.save("productos_despachar.pdf");
     setShowModal(false);
   };
-  
+
   // Función de traducción
   const traducirCampo = (campo: string): string => {
     const map: Record<string, string> = {
@@ -145,7 +147,7 @@ const ProductosDespachar: React.FC = () => {
 
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            <BsBoxSeam className={styles.headerIcon} />
+            <BoxPlotOutlined className={styles.headerIcon} />
             <h2 className={styles.headerTitle}>Productos para Despacho</h2>
             <Badge pill bg="danger">
               {productos.length}
@@ -162,19 +164,19 @@ const ProductosDespachar: React.FC = () => {
         </div>
 
         <div className={styles.paginationInfo}>
-             <span>
-              Mostrando {startItem}-{endItem} de {productos.length} productos
-            </span>
-            <div className={styles.paginationControls}>
-               <Button className={styles.btnRojoOutline} onClick={exportToExcel} size="sm">
-                  Exportar Excel
-               </Button>
-               <Button className={styles.btnRojoOutline} onClick={exportToPDF} size="sm">
-                  Exportar PDF
-               </Button>
-            </div>
+          <span>
+            Mostrando {startItem}-{endItem} de {productos.length} productos
+          </span>
+          <div className={styles.paginationControls}>
+            <Button className={styles.btnRojoOutline} onClick={exportToExcel} size="sm">
+              <FileExcelOutlined /> Exportar Excel
+            </Button>
+            <Button className={styles.btnRojoOutline} onClick={exportToPDF} size="sm">
+              <FilePdfOutlined /> Exportar PDF
+            </Button>
           </div>
-          <br />
+        </div>
+        <br />
         <Table responsive bordered hover>
           <thead className="table-light text-center">
             <tr>
@@ -224,30 +226,30 @@ const ProductosDespachar: React.FC = () => {
             )}
           </tbody>
         </Table>
-        
+
         {productos.length > 0 && !loading && (
           <div className={styles.paginationInfo}>
-             <span>
+            <span>
               Mostrando {startItem}-{endItem} de {productos.length} productos
             </span>
             <div className={styles.paginationControls}>
-               <Button
-                  className={styles.btnRojo}
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  size="sm"
-               >
-                  Anterior
-               </Button>
-               <span className="text-muted">Página {currentPage} de {totalPages}</span>
-               <Button
-                  className={styles.btnRojo}
-                  disabled={currentPage === totalPages || totalPages === 0}
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  size="sm"
-               >
-                  Siguiente
-               </Button>
+              <Button
+                className={styles.btnRojo}
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(currentPage - 1)}
+                size="sm"
+              >
+                Anterior
+              </Button>
+              <span className="text-muted">Página {currentPage} de {totalPages}</span>
+              <Button
+                className={styles.btnRojo}
+                disabled={currentPage === totalPages || totalPages === 0}
+                onClick={() => setCurrentPage(currentPage + 1)}
+                size="sm"
+              >
+                Siguiente
+              </Button>
             </div>
           </div>
         )}
@@ -262,7 +264,7 @@ const ProductosDespachar: React.FC = () => {
         </Modal.Body>
         <Modal.Footer>
           <Button className={styles.btnRojo} onClick={handleDownloadPDF}>
-            Descargar PDF
+            <FilePdfOutlined /> Descargar PDF
           </Button>
         </Modal.Footer>
       </Modal>

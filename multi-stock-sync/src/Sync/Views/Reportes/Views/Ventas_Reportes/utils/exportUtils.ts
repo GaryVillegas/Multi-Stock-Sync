@@ -2,6 +2,26 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
+interface ProductoVendido {
+  order_id: number;
+  title: string;
+  quantity: number;
+  price: number;
+}
+
+interface Mes {
+  month: string;
+  total_sales: number;
+  sold_products: ProductoVendido[];
+}
+
+interface DetalleVenta {
+  key: string;
+  mes: string;
+  producto: string;
+  cantidad: number;
+  precioUnitario: number;
+}
 
 // 🟧 PDF: Ventas por Mes
 export const generarPDFPorMes = (
@@ -198,18 +218,34 @@ export const guardarPDFPorYear = (
 
 // 🟦 Excel: Año
 export const exportarExcelPorYear = (
-  data: any[],
+  salesData: Mes[],
+  detalleVentas: DetalleVenta[],
   year: string,
   userName: string
 ): void => {
-  const worksheetData = [
-    ["Mes", "Ventas Totales"],
-    ...data.map((d) => [d.month, d.total_sales]),
-  ];
+  // Hoja de Resumen Mensual 
+  const resumenData = salesData.map(mes => ({
+    "Mes": mes.month,
+    "Ventas Totales (CLP)": mes.total_sales
+  }));
+  const totalSales = salesData.reduce((acc, mes) => acc + mes.total_sales, 0);
+  resumenData.push({ "Mes": "Total Año", "Ventas Totales (CLP)": totalSales });
+  const wsResumen = XLSX.utils.json_to_sheet(resumenData);
+  wsResumen['!cols'] = [{ wch: 20 }, { wch: 25 }];
 
-  const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "VentasAnuales");
+  // Hoja de Detalle de Productos Vendidos
+  const detalleDataForSheet = detalleVentas.map(item => ({
+    "Mes": item.mes,
+    "Producto": item.producto,
+    "Cantidad": item.cantidad,
+    "Precio Unitario (CLP)": item.precioUnitario,
+  }));
+  const wsDetalle = XLSX.utils.json_to_sheet(detalleDataForSheet);
+  wsDetalle['!cols'] = [{ wch: 15 }, { wch: 50 }, { wch: 10 }, { wch: 25 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen por Mes");
+  XLSX.utils.book_append_sheet(wb, wsDetalle, "Detalle de Ventas");
 
-  XLSX.writeFile(workbook, `Ventas_${userName}_${year}.xlsx`);
+  // Exportar el archivo
+  XLSX.writeFile(wb, `Reporte_Ventas_Detallado_${userName}_${year}.xlsx`);
 };

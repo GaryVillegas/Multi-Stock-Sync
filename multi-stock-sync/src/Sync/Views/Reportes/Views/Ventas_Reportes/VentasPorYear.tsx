@@ -1,16 +1,28 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { Modal, Button } from "react-bootstrap";
-import axiosInstance from '../../../../../axiosConfig';
+import {
+  Layout,
+  Card,
+  Typography,
+  Select,
+  Button,
+  Table,
+  Space,
+  Row,
+  Col,
+  Modal,
+  Spin,
+  Empty,
+} from "antd";
+import { FilePdfOutlined, FileExcelOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
+import axiosInstance from "../../../../../axiosConfig";
 import GraficoPorYear from "./components/GraficoPorYear";
 import {
   generarPDFPorYear,
   guardarPDFPorYear,
   exportarExcelPorYear,
 } from "./utils/exportUtils";
-import styles from "./VentasPorYear.module.css";
 
-// Tipado para producto vendido
 interface ProductoVendido {
   order_id: number;
   title: string;
@@ -18,238 +30,235 @@ interface ProductoVendido {
   price: number;
 }
 
-// Tipado para cada mes con su total de ventas
 interface Mes {
   month: string;
   total_sales: number;
   sold_products: ProductoVendido[];
 }
 
-
+const { Content } = Layout;
+const { Title, Text } = Typography;
 
 const VentasPorYear: React.FC = () => {
   const { client_id } = useParams<{ client_id: string }>();
 
-  // Estado principal
   const [salesData, setSalesData] = useState<Mes[]>([]);
   const [selectedYear, setSelectedYear] = useState("2025");
   const [userName, setUserName] = useState("");
-  const [showPDFModal, setShowPDFModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isPdfModalVisible, setIsPdfModalVisible] = useState(false);
   const [pdfData, setPdfData] = useState<string | null>(null);
-  const [mostrarTablaDetalle, setMostrarTablaDetalle] = useState(false);
+  const [showDetailTable, setShowDetailTable] = useState(false);
 
-  // Total vendido en el año
-  const totalSales = salesData.reduce((acc, mes) => acc + mes.total_sales, 0);
-
-  // Fetch de ventas y usuario al cargar o cambiar el año
   useEffect(() => {
-    const fetchSalesData = async () => {
+    const fetchData = async () => {
+      if (!client_id) return;
+      setLoading(true);
       try {
-        const response = await axiosInstance.get(
-          `${import.meta.env.VITE_API_URL}/mercadolibre/annual-sales/${client_id}?year=${selectedYear}`
-        );
-        const rawData = response.data.data;
+        const [salesResponse, userResponse] = await Promise.all([
+          axiosInstance.get(
+            `${import.meta.env.VITE_API_URL}/mercadolibre/annual-sales/${client_id}?year=${selectedYear}`
+          ),
+          axiosInstance.get(
+            `${import.meta.env.VITE_API_URL}/mercadolibre/credentials/${client_id}`
+          ),
+        ]);
 
+        const rawData = salesResponse.data.data;
         const parsed = Object.keys(rawData).map((month) => ({
           month,
           total_sales: rawData[month].total_amount,
           sold_products: rawData[month].orders.flatMap(
             (order: { sold_products: ProductoVendido[] }) => order.sold_products
-          )
+          ),
         }));
-
         setSalesData(parsed);
+        setUserName(userResponse.data.data.nickname);
+
       } catch (err) {
-        console.error("Error cargando ventas:", err);
+        console.error("Error cargando datos:", err);
         setSalesData([]);
+        setUserName("");
+      } finally {
+        setLoading(false);
       }
     };
 
-    const fetchUser = async () => {
-      try {
-        const res = await axiosInstance.get(
-          `${import.meta.env.VITE_API_URL}/mercadolibre/credentials/${client_id}`
-        );
-        setUserName(res.data.data.nickname);
-      } catch (err) {
-        console.error("Error obteniendo nombre de usuario:", err);
-      }
-    };
-
-    if (client_id) {
-      fetchSalesData();
-      fetchUser();
-    }
+    fetchData();
   }, [client_id, selectedYear]);
 
-  // Generar PDF de vista previa
-  const generatePDF = () => {
+  const totalSales = useMemo(() =>
+    salesData.reduce((acc, mes) => acc + mes.total_sales, 0),
+    [salesData]
+  );
+
+  // Crea la lista aplanada de productos.
+  const detalleDataSource = useMemo(() =>
+    salesData.flatMap((mes) =>
+      mes.sold_products.map((prod, prodIndex) => ({
+        key: `${mes.month}-${prod.order_id}-${prodIndex}`,
+        mes: mes.month,
+        producto: prod.title,
+        cantidad: prod.quantity,
+        precioUnitario: prod.price,
+      }))
+    ), [salesData]
+  );
+
+  // Handlers de Exportación
+  const handlePreviewPDF = () => {
     const pdfBase64 = generarPDFPorYear(salesData, selectedYear, userName);
-    const base64Data = pdfBase64.split(',')[1]; // separar el header data:application/pdf;base64,
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length).fill(0).map((_, i) => byteCharacters.charCodeAt(i));
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: "application/pdf" });
+    const blob = new Blob(
+      [Uint8Array.from(atob(pdfBase64.split(',')[1]), c => c.charCodeAt(0))],
+      { type: "application/pdf" }
+    );
     const url = URL.createObjectURL(blob);
     setPdfData(url);
-    setShowPDFModal(true);
+    setIsPdfModalVisible(true);
   };
 
-  // Descargar PDF directo
-  const savePDF = () => {
+  const handleSavePDF = () => {
     guardarPDFPorYear(salesData, selectedYear, userName);
+    setIsPdfModalVisible(false);
   };
 
-  // Exportar Excel
-  const generateExcel = () => {
-    exportarExcelPorYear(salesData, selectedYear, userName);
+  const handleGenerateExcel = () => {
+    exportarExcelPorYear(salesData, detalleDataSource, selectedYear, userName);
   };
 
-  // Opciones de años disponibles
-  const years = Array.from({ length: 4 }, (_, i) => (2025 - i).toString());
+  // Columnas para AntD 
+  const yearOptions = Array.from({ length: 4 }, (_, i) => ({
+    value: (2025 - i).toString(),
+    label: (2025 - i).toString(),
+  }));
 
+  const detailTableColumns = [
+    { title: 'Mes', dataIndex: 'mes', key: 'mes', sorter: (a: { mes: string; }, b: { mes: any; }) => a.mes.localeCompare(b.mes) },
+    { title: 'Producto', dataIndex: 'producto', key: 'producto', sorter: (a: { producto: string; }, b: { producto: any; }) => a.producto.localeCompare(b.producto) },
+    { title: 'Cantidad', dataIndex: 'cantidad', key: 'cantidad', sorter: (a: { cantidad: number; }, b: { cantidad: number; }) => a.cantidad - b.cantidad },
+    {
+      title: 'Precio Unitario',
+      dataIndex: 'precioUnitario',
+      key: 'precioUnitario',
+      render: (price: number) => `$${price.toLocaleString("es-CL")} CLP`,
+      sorter: (a: { precioUnitario: number; }, b: { precioUnitario: number; }) => a.precioUnitario - b.precioUnitario
+    },
+  ];
+
+  // Render con Ant Design
   return (
-    <div className={styles.container}>
-      <h2 className={styles.titulo}>Ventas por Año</h2>
+    <Content style={{ padding: '24px', background: '#f0f2f5' }}>
+      <Space direction="vertical" size="large" style={{ display: 'flex' }}>
+        <Card>
+          <Row justify="space-between" align="middle">
+            <Col>
+              <Title level={2} style={{ margin: 0 }}>Ventas por Año</Title>
+              <Text type="secondary">Usuario: <strong>{userName || "Cargando..."}</strong></Text>
+            </Col>
+            <Col>
+              <Space>
+                <Text>Selecciona Año:</Text>
+                <Select
+                  value={selectedYear}
+                  style={{ width: 120 }}
+                  onChange={(value) => setSelectedYear(value)}
+                  options={yearOptions}
+                  loading={loading}
+                />
+              </Space>
+            </Col>
+          </Row>
+        </Card>
 
-      <p className={styles.subtitulo}>
-        Usuario: <strong>{userName || "Cargando..."}</strong>
-      </p>
+        <Spin spinning={loading} tip="Cargando datos...">
+          {salesData.length > 0 ? (
+            <>
+              <Card>
+                <GraficoPorYear
+                  chartData={{
+                    labels: salesData.map((m) => m.month),
+                    datasets: [
+                      {
+                        label: "Ventas Totales",
+                        data: salesData.map((m) => m.total_sales),
+                        backgroundColor: "rgba(24, 144, 255, 0.6)",
+                        borderColor: "rgba(24, 144, 255, 1)",
+                        borderWidth: 1,
+                      },
+                    ],
+                  }}
+                  totalVentas={totalSales}
+                  year={selectedYear}
+                />
+              </Card>
 
-      {/* Selector Año */}
-      <div className={styles.fechaSelector}>
-        <label>Selecciona Año:</label>
-        <select
-          value={selectedYear}
-          onChange={(e) => setSelectedYear(e.target.value)}
-        >
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
-      </div>
+              <Card>
+                <Space>
+                  <Button type="primary" icon={<FilePdfOutlined />} onClick={handlePreviewPDF}>
+                    Exportar a PDF
+                  </Button>
+                  <Button type="primary" ghost icon={<FileExcelOutlined />} onClick={handleGenerateExcel}>
+                    Exportar a Excel
+                  </Button>
+                  <Button
+                    icon={showDetailTable ? <UpOutlined /> : <DownOutlined />}
+                    onClick={() => setShowDetailTable(!showDetailTable)}
+                  >
+                    {showDetailTable ? "Ocultar Detalle" : "Ver Detalle"}
+                  </Button>
+                </Space>
+              </Card>
 
-      {/* Gráfico de Ventas Anual */}
-      <div className={styles.graficoContenedor}>
-        <GraficoPorYear
-          chartData={{
-            labels: salesData.map((m) => m.month),
-            datasets: [
-              {
-                label: "Ventas Totales",
-                data: salesData.map((m) => m.total_sales),
-                backgroundColor: "rgba(255,165,0,0.6)",
-                borderColor: "rgba(255,140,0,1)",
-                borderWidth: 1,
-              },
-            ],
-          }}
-          totalVentas={totalSales}
-          year={selectedYear}
-        />
-      </div>
-
-      {/* Botones de acción */}
-      <div className={styles.botonContenedor}>
-        <button
-          className={`${styles.boton} ${styles.botonPDF}`}
-          onClick={generatePDF}
-        >
-          Exportar a PDF
-        </button>
-        <button
-          className={`${styles.boton} ${styles.botonExcel}`}
-          onClick={generateExcel}
-        >
-          Exportar a Excel
-        </button>
-        <button
-          className={`${styles.boton} ${styles.botonDetalle}`}
-          onClick={() => setMostrarTablaDetalle(!mostrarTablaDetalle)}
-        >
-          {mostrarTablaDetalle ? "Ocultar Detalle" : "Ver Detalle"}
-        </button>
-      </div>
-
-      {/* Tabla de detalle */}
-      {mostrarTablaDetalle && (
-        <div className={styles.tablaDetalle}>
-          <h4 className="text-center mt-4">Detalle de Ventas por Año</h4>
-          <table className="table table-striped table-bordered">
-            <thead>
-              <tr>
-                <th>Mes</th>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Precio Unitario</th>
-              </tr>
-            </thead>
-            <tbody>
-              {salesData.flatMap((mes) =>
-                mes.sold_products.map((prod, index) => (
-                  <tr key={`${mes.month}-${index}`}>
-                    <td>{mes.month}</td>
-                    <td>{prod.title}</td>
-                    <td>{prod.quantity}</td>
-                    <td>${prod.price.toLocaleString("es-CL")} CLP</td>
-                  </tr>
-                ))
+              {showDetailTable && (
+                <Card title="Detalle de Ventas por Año">
+                  <Table
+                    columns={detailTableColumns}
+                    dataSource={detalleDataSource}
+                    pagination={{ pageSize: 10 }}
+                    summary={() => (
+                      <Table.Summary.Row style={{ background: '#fafafa' }}>
+                        <Table.Summary.Cell index={0} colSpan={3}>
+                          <Text strong>Total Vendido Año</Text>
+                        </Table.Summary.Cell>
+                        <Table.Summary.Cell index={1} >
+                          <Text strong>${totalSales.toLocaleString("es-CL")} CLP</Text>
+                        </Table.Summary.Cell>
+                      </Table.Summary.Row>
+                    )}
+                  />
+                </Card>
               )}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colSpan={3}><strong>Total Vendido Año</strong></td>
-                <td><strong>${totalSales.toLocaleString("es-CL")} CLP</strong></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-
-      {/* Modal vista previa PDF */}
-      {pdfData && (
-        <Modal
-          show={showPDFModal}
-          onHide={() => setShowPDFModal(false)}
-          size="lg"
-          centered
-          dialogClassName="pdf-modal-fullscreen"
-        >
-          <Modal.Header closeButton>
-            <Modal.Title>Vista Previa del PDF</Modal.Title>
-          </Modal.Header>
-          <Modal.Body style={{ padding: 0 }}>
-            <div style={{ textAlign: "center" }}>
-              <iframe
-                src={`${pdfData}#zoom=110`} 
-                style={{
-                  width: "100%",
-                  height: "80vh",
-                  border: "none",
-                }}
-                title="Vista Previa PDF"
-              />
-              <p style={{ fontSize: "0.9em", marginTop: "0.5em" }}>
-                ¿No se muestra el PDF?{" "}
-                <a href={pdfData} target="_blank" rel="noopener noreferrer">
-                  Ábrelo en una nueva pestaña
-                </a>
-              </p>
-            </div>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="primary" onClick={savePDF}>
-              Guardar PDF
-            </Button>
-            <Button variant="secondary" onClick={() => setShowPDFModal(false)}>
-              Cerrar
-            </Button>
-          </Modal.Footer>
-        </Modal>
-      )}
-    </div>
+            </>
+          ) : (
+            !loading && <Card><Empty description={`No se encontraron ventas para el año ${selectedYear}`} /></Card>
+          )}
+        </Spin>
+      </Space>
+      
+      <Modal
+        title="Vista Previa del PDF"
+        open={isPdfModalVisible}
+        onCancel={() => setIsPdfModalVisible(false)}
+        width="90%"
+        style={{ top: 20 }}
+        footer={[
+          <Button key="close" onClick={() => setIsPdfModalVisible(false)}>
+            Cerrar
+          </Button>,
+          <Button key="save" type="primary" onClick={handleSavePDF}>
+            Guardar PDF
+          </Button>,
+        ]}
+      >
+        {pdfData && (
+          <iframe
+            src={`${pdfData}#zoom=100`}
+            style={{ width: '100%', height: '75vh', border: 'none' }}
+            title="Vista Previa PDF"
+          />
+        )}
+      </Modal>
+    </Content>
   );
 };
 
